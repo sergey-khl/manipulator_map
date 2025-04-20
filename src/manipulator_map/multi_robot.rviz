@@ -1,0 +1,37 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: base_link
+
+  Displays:
+    - Name: Grid
+      Class: rviz/Grid
+      Enabled: true
+
+    - Name: LeaderRobot
+      Class: rviz/RobotModel
+      Enabled: true
+      Robot Description: leader/robot_description
+
+    - Name: FollowerRobot
+      Class: rviz/RobotModel
+      Enabled: true
+      Robot Description: follower/robot_description
+
+  Tools:
+    - Class: rviz/Interact
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+    - Class: rviz/SetInitialPose
+    - Class: rviz/SetGoal
+
+  View Manager:
+    Class: ""
+    Current:
+      Class: rviz/Orbit

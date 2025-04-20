@@ -1,0 +1,19 @@
+<launch>
+    <arg name="leader_urdf" default="$(find manipulator_map)/robots/panda/panda.urdf"/>
+    <arg name="follower_urdf" default="$(find manipulator_map)/robots/GEN3-7DOF-VISION_ARM_URDF_V12/kinova_gen3.urdf"/>
+    <arg name="rviz_config" default="$(find manipulator_map)/multi_robot.rviz"/>
+
+    <group ns="leader">
+        <param name="robot_description" command="$(find xacro)/xacro $(arg leader_urdf)" />
+        <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    </group>
+
+    <group ns="follower">
+        <param name="robot_description" command="$(find xacro)/xacro $(arg follower_urdf)" />
+        <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    </group>
+
+    <!-- <node name="syncer" pkg="manipulator_map" type="leader_follower_sync.py"/> -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(arg rviz_config)" required="true"/>
+
+</launch>
