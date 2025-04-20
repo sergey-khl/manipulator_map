@@ -72,7 +72,7 @@ RUN apt-get update \
 # Install additional developer tools here...
 
 RUN apt-get update \
- && apt-get install -y sudo ros-noetic-joint-state-publisher-gui ros-noetic-kdl-parser-py \
+ && apt-get install -y sudo ros-noetic-joint-state-publisher-gui ros-noetic-kdl-parser-py ros-noetic-trac-ik \
  && rm -rf /var/lib/apt/lists/* \
  && addgroup --gid ${GID} ${USERNAME} \
  && adduser --disabled-password --gecos '' --uid ${GID} --gid ${GID} ${USERNAME} \

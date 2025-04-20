@@ -5,6 +5,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
 import kdl_parser_py.urdf
 import PyKDL as kdl
+from trac_ik_python.trac_ik import IK
 
 class LeaderFollowerSync:
     def __init__(self):
@@ -41,27 +42,14 @@ class LeaderFollowerSync:
 
         return frame
     
-    def inverseKinematics(self, chain, target, guess):
-        fk_solver = kdl.ChainFkSolverPos_recursive(chain)
-        ik_solver = kdl.ChainIkSolverVel_pinv(chain)
-        ik_solver_pos = kdl.ChainIkSolverPos_NR(chain, fk_solver, ik_solver)
+    def inverseKinematics(self, solver, target, guess):
+        pos = target.p
+        quat = target.M.GetQuaternion()
 
-        # Output joint angles
-        result = kdl.JntArray(chain.getNrOfJoints())
-
-        ret = ik_solver_pos.CartToJnt(guess, target, result)
-        print(ret)
-        if ret >= 0:
-            # print("Inverse Kinematics result:")
-            # for i in range(result.rows()):
-            #     print(f"Joint {i}: {result[i]}")
-            
-            return result
-        else:
-            print("IK solver failed")
-            return None
+        solution = solver.get_ik([*guess], *pos, *quat)
+        print(solution)
     
-    def getTree(self, param):
+    def getChain(self, param, base, ee):
         # Load and parse URDF
         if not rospy.has_param(param):
             rospy.logerr(f"Parameter '{param}' not found!")
@@ -73,7 +61,12 @@ class LeaderFollowerSync:
             rospy.logerr("Failed to parse URDF into KDL tree.")
             return None
 
-        return tree
+        #TODO: find an automatic way to extract these
+        ik_solver = IK(base, ee, urdf_string=urdf, timeout=0.05, solve_type="Speed")
+
+        chain = tree.getChain(base, ee)
+
+        return chain, ik_solver
     
     def getNames(self, chain):
         joint_names = []
@@ -87,12 +80,8 @@ class LeaderFollowerSync:
         return joint_names
     
     def setupChains(self):
-        leader_tree = self.getTree("leader/robot_description")
-        follower_tree = self.getTree("follower/robot_description")
-
-        #TODO: find an automatic way to extract these
-        self.leader_chain = leader_tree.getChain("base_link", "panda_hand")
-        self.follower_chain = follower_tree.getChain("base_link", "end_effector_link")
+        self.leader_chain, self.leader_ik_solver = self.getChain("leader/robot_description", "base_link", "panda_hand")
+        self.follower_chain, self.follower_ik_solver = self.getChain("follower/robot_description", "base_link", "end_effector_link")
 
         self.leader_joint_names = self.getNames(self.leader_chain)
         self.follower_joint_names = self.getNames(self.follower_chain)
@@ -101,13 +90,13 @@ class LeaderFollowerSync:
         rate = rospy.Rate(1000)  # 1 KHz
 
         # wait for subscriber to get some data
-        rospy.sleep(2.5)
+        rospy.sleep(0.5)
         follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
         leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
 
         # target = kdl.Frame(leader_frame.M, leader_frame.p)
-        self.follower_joints = self.inverseKinematics(self.follower_chain, leader_frame, self.follower_joints)
-        self.leader_joints = self.inverseKinematics(self.leader_chain, leader_frame, self.leader_joints)
+        self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, self.follower_joints)
+        self.leader_joints = self.inverseKinematics(self.leader_ik_solver, leader_frame, self.leader_joints)
 
         # print(new_follower_joints, new_leader_joints)
 
