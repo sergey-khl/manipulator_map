@@ -1,0 +1,19 @@
+{
+  "name": "ROS Docker",
+  "dockerComposeFile": [
+    "../docker/docker-compose-vscode.yml"
+  ],
+  "service": "ros_docker",
+  "workspaceFolder": "/catkin_ws",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-iot.vscode-ros",
+        "ms-python.python",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools"
+      ]
+    }
+  }
+}
