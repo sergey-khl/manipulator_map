@@ -26,7 +26,7 @@ class LeaderFollowerSync:
         joint_state.header.stamp = rospy.Time.now()
 
         joint_state.name = name
-        joint_state.position = [j for j in position]
+        joint_state.position = [*position]
         return joint_state
 
     def forwardKinematics(self, chain, joints):
@@ -47,7 +47,7 @@ class LeaderFollowerSync:
         quat = target.M.GetQuaternion()
 
         solution = solver.get_ik([*guess], *pos, *quat)
-        print(solution)
+        return solution
     
     def getChain(self, param, base, ee):
         # Load and parse URDF
