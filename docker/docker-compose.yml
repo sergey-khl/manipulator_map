@@ -26,5 +26,5 @@ services:
       - /dev:/dev
       # Required for accessing storage media
       # - /media:/media
-      - ../src:${CATKIN_WORKSPACE_DIR}/src
+      - ../catkin_ws:${CATKIN_WORKSPACE_DIR}
 

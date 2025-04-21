@@ -20,6 +20,8 @@ RUN apt-get update \
     python3-pip \
     python3-catkin-tools \
     python3-osrf-pycommon \
+    python3-pandas \
+    python3-sklearn \
  && rm -rf /var/lib/apt/lists/*
 
  RUN apt-get update \
@@ -81,14 +83,14 @@ RUN apt-get update \
  && chown -R ${UID}:${GID} /home/${USERNAME} \
  && chown -R ${UID}:${GID} ${CATKIN_WORKSPACE_DIR}
 
-RUN pip3 install pandas scikit-learn numpy
-
 ENV DEBIAN_FRONTEND=dialog
 
 RUN echo "alias rsource='source ${CATKIN_WORKSPACE_DIR}/devel/setup.bash'" >> /home/${USERNAME}/.bash_aliases \
  && echo "alias rbuild='(cd ${CATKIN_WORKSPACE_DIR} && catkin build)'" >> /home/${USERNAME}/.bash_aliases \
  && echo "alias rclean='(cd ${CATKIN_WORKSPACE_DIR} && catkin clean -y)'" >> /home/${USERNAME}/.bash_aliases \
  && echo "rsource || source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc
+
+RUN python3 -m venv venv && source venv/bin/activate && pip install "numpy<1.24" "scikit-learn<1.2" "pandas"
 
 USER ${USERNAME}
 
