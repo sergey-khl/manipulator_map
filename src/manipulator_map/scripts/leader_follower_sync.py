@@ -4,8 +4,14 @@ import rospy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
 import kdl_parser_py.urdf
+from urdf_parser_py.urdf import URDF
 import PyKDL as kdl
 from trac_ik_python.trac_ik import IK
+
+# for the map stuff
+import pandas as pd
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
 
 class LeaderFollowerSync:
     def __init__(self):
@@ -19,6 +25,8 @@ class LeaderFollowerSync:
         self.follower_joints = kdl.JntArray(self.follower_chain.getNrOfJoints())
         self.leader_joints = kdl.JntArray(self.leader_chain.getNrOfJoints())
         self.leader_joints[3] = -1.57
+
+        self.granularity = 1
 
     def constructJointState(self, name, position):
         joint_state = JointState()
@@ -56,6 +64,7 @@ class LeaderFollowerSync:
             return
         urdf = rospy.get_param(param)
         (ok, tree) = kdl_parser_py.urdf.treeFromString(urdf)
+        robot = URDF.from_parameter_server(param)
 
         if not ok:
             rospy.logerr("Failed to parse URDF into KDL tree.")
@@ -66,49 +75,94 @@ class LeaderFollowerSync:
 
         chain = tree.getChain(base, ee)
 
-        return chain, ik_solver
+        joint_infos = self.getJointInfos(robot)
+
+        return chain, ik_solver, joint_infos
     
-    def getNames(self, chain):
-        joint_names = []
-        for idx in range(chain.getNrOfSegments()):
-            segment = chain.getSegment(idx)
-            joint = segment.getJoint()
+    def getJointInfos(self, robot):
+        joint_infos = []
 
-            if joint.getType() == 0:
-                joint_names.append(joint.getName())
+        for joint_name in robot.joint_map:
+            joint_info = {}
+            joint = robot.joint_map.get(joint_name)
+            if joint.joint_type == "fixed":
+                continue
 
-        return joint_names
+            joint_info["name"] = joint_name
+            
+            # 0 and 0 if no lower and upper limit stated
+            if joint.limit.lower == 0 and joint.limit.upper == 0:
+                joint_info["lower_limit"] = -3.14
+                joint_info["upper_limit"] = 3.14
+            else:
+                joint_info["lower_limit"] = joint.limit.lower
+                joint_info["upper_limit"] = joint.limit.upper
+            joint_infos.append(joint_info)
+
+        return joint_infos
+
     
     def setupChains(self):
-        self.leader_chain, self.leader_ik_solver = self.getChain("leader/robot_description", "base_link", "panda_hand")
-        self.follower_chain, self.follower_ik_solver = self.getChain("follower/robot_description", "base_link", "end_effector_link")
+        self.leader_chain, self.leader_ik_solver, self.leader_joint_infos = self.getChain("leader/robot_description", "base_link", "panda_hand")
+        self.follower_chain, self.follower_ik_solver, self.follower_joint_infos = self.getChain("follower/robot_description", "base_link", "end_effector_link")
 
-        self.leader_joint_names = self.getNames(self.leader_chain)
-        self.follower_joint_names = self.getNames(self.follower_chain)
 
     def sync(self):
         rate = rospy.Rate(1000)  # 1 KHz
 
         # wait for subscriber to get some data
         rospy.sleep(0.5)
-        follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
-        leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
 
-        # target = kdl.Frame(leader_frame.M, leader_frame.p)
-        self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, self.follower_joints)
-        self.leader_joints = self.inverseKinematics(self.leader_ik_solver, leader_frame, self.leader_joints)
 
-        # print(new_follower_joints, new_leader_joints)
+        self.createMap(self.follower_chain, self.follower_joint_infos)
+        # follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
+        # leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
 
-        while not rospy.is_shutdown():
-            if self.follower_joints is not None:
-                new_follower_joint_state = self.constructJointState(self.follower_joint_names, self.follower_joints)
-                self.follower_pub.publish(new_follower_joint_state)
-            if self.leader_joints is not None:
-                new_leader_joint_state = self.constructJointState(self.leader_joint_names, self.leader_joints)
-                self.leader_pub.publish(new_leader_joint_state)
-            rate.sleep()
+        # # target = kdl.Frame(leader_frame.M, leader_frame.p)
+        # self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, self.follower_joints)
+        # self.leader_joints = self.inverseKinematics(self.leader_ik_solver, leader_frame, self.leader_joints)
 
+        # # print(new_follower_joints, new_leader_joints)
+
+        # while not rospy.is_shutdown():
+        #     if self.follower_joints is not None:
+        #         new_follower_joint_state = self.constructJointState(self.follower_joint_names, self.follower_joints)
+        #         self.follower_pub.publish(new_follower_joint_state)
+        #     if self.leader_joints is not None:
+        #         new_leader_joint_state = self.constructJointState(self.leader_joint_names, self.leader_joints)
+        #         self.leader_pub.publish(new_leader_joint_state)
+        #     rate.sleep()
+
+    # arbitrary DOF find all possible joint states
+    def findMapJointConfigurations(self, joint_infos, curr_idx, configuration):
+        lower = joint_infos[curr_idx]['lower_limit']
+        upper = joint_infos[curr_idx]['upper_limit']
+        step = self.granularity
+        configs = []
+        angle = lower
+
+        # go through each joint position for a joint
+        while angle <= upper:
+            cfg = configuration.copy()
+            cfg[curr_idx] = angle
+
+            if curr_idx == len(joint_infos) - 1:
+                # we are done at the last joint
+                configs.append(cfg)
+            else:
+                # fill in the configuration recursively
+                child_configs = self.findMapJointConfigurations(
+                    joint_infos, curr_idx + 1, cfg
+                )
+                configs.extend(child_configs)
+
+            angle += step
+
+        return configs
+
+    def createMap(self, chain, joint_infos):
+        configuration_map = self.findMapJointConfigurations(joint_infos, 0, [0]*len(joint_infos))
+        print(len(configuration_map))
 
 
 if __name__ == '__main__':

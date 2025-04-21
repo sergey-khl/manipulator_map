@@ -17,6 +17,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get -y install \
     git \
+    python3-pip \
     python3-catkin-tools \
     python3-osrf-pycommon \
  && rm -rf /var/lib/apt/lists/*
@@ -79,6 +80,8 @@ RUN apt-get update \
  && echo ${USERNAME} ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/${USERNAME} \
  && chown -R ${UID}:${GID} /home/${USERNAME} \
  && chown -R ${UID}:${GID} ${CATKIN_WORKSPACE_DIR}
+
+RUN pip3 install pandas scikit-learn numpy
 
 ENV DEBIAN_FRONTEND=dialog
 
