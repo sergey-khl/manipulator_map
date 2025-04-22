@@ -8,6 +8,7 @@ import kdl_parser_py.urdf
 from urdf_parser_py.urdf import URDF
 import PyKDL as kdl
 from trac_ik_python.trac_ik import IK
+import random
 
 # for the map stuff
 import pandas as pd
@@ -66,7 +67,7 @@ class LeaderFollowerSync:
         self.follower_joints = kdl.JntArray(self.follower_chain.getNrOfJoints())
         self.leader_joints = kdl.JntArray(self.leader_chain.getNrOfJoints())
         self.leader_joints[3] = -1.57
-        self.leader_joints[5] = -1.57
+        self.leader_joints[5] =  2.6
 
         rospack = rospkg.RosPack()
         self.follower_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.follower_robot_name}/{self.follower_robot_name}.csv"
@@ -82,7 +83,7 @@ class LeaderFollowerSync:
         # the joint(s) we care about matching the follower to the leader.
         # higher the number for the joint index the more we care.
         # needs to be tweeked for each robot so TODO: make more generalizable
-        self.criteria_weights = np.array([0, 0, 0, 1, 1, 0, 0])
+        self.criteria_weights = np.array([1, 1, 1, 1, 1, 1, 1])
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -180,9 +181,9 @@ class LeaderFollowerSync:
     # assuming the follower leader relationship, TODO: probably should do this for other places as well
     def findBestNearest(self, nearest, criteria):
         values = np.array(nearest[[info["name"] for info in self.follower_joint_infos]])
-        values = np.array([self._getLinksPos(self.follower_chain, self.follower_joint_infos, self.arrayToKdlJoints(val)) for val in values]) # shape of (20, 7 , 3)
+        values = np.array([self._getLinksPos(self.follower_chain, self.follower_joint_infos, self.arrayToKdlJoints(val)) for val in values]) # shape of (k, DOF , 3)
         target = self._getLinksPos(self.leader_chain, self.leader_joint_infos, criteria)
-        target = target[np.newaxis, :, :] # shape of (1, 7, 3)
+        target = target[np.newaxis, :, :] # shape of (1, DOF, 3)
 
         # squared difference
         diffs = (values - target) ** 2
@@ -193,57 +194,53 @@ class LeaderFollowerSync:
         # link (axis=1) and coord (axis=2) to get one score per sample
         scores = np.sum(weighted, axis=(1, 2))
 
+
         # choose lowest error
         best_idx = np.argmin(scores)
-        # print(best_idx)
-        # best_idx = 1
         best_nearest = np.array(nearest.iloc[best_idx][[info["name"] for info in self.follower_joint_infos]])
         return best_nearest
 
-    def sync(self):
-        # rate = rospy.Rate(1000)  # 1 KHz
-        rate = rospy.Rate(1)  # 1 KHz
+    def updateLeaderJoints(self):
+        idx = random.randint(0, len(self.leader_joint_infos) - 1)
+        joint = self.leader_joint_infos[idx]
 
-        # wait for subscriber to get some data
-        rospy.sleep(0.5)
-        old = rospy.Time.now()
+        delta = random.choice([-1, 1]) * 0.05
 
-        # follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
-        leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
+        # Clamp to joint limits
+        new_val = np.clip(self.leader_joints[idx] + delta, joint['lower_limit'], joint['upper_limit'])
 
+        # Update the joint value
+        self.leader_joints[idx] = new_val
+
+    def findNextSeed(self, leader_frame):
         query = [*leader_frame.p, *leader_frame.M.GetQuaternion()]
         nearest = self.follower_ksearch.kNearestInMap(query)
 
-        curr = self.findBestNearest(nearest, self.leader_joints)
-        print(curr)
+        return self.findBestNearest(nearest, self.leader_joints)
 
-        new = rospy.Time.now()
-        print((new-old).to_sec())
-
-        # # target = kdl.Frame(leader_frame.M, leader_frame.p)
-        # self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, self.follower_joints)
-        # self.leader_joints = self.inverseKinematics(self.leader_ik_solver, leader_frame, self.leader_joints)
-
-        # # print(new_follower_joints, new_leader_joints)
-
-        self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, curr)
-        print(self.follower_joints)
+    def sync(self):
+        rate = rospy.Rate(1000)  # 1 KHz
+        # rate = rospy.Rate(1)  # 1 KHz
 
         while not rospy.is_shutdown():
-            # new_joint = [curr[info["name"]] for info in self.follower_joint_infos]
-            # print(new_joint)
-            new_follower_joint_state = self.constructJointState(self.follower_joint_infos, self.follower_joints)
-            self.follower_pub.publish(new_follower_joint_state)
+            # find where the leader currently is
+            leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
+            seed = self.findNextSeed(leader_frame)
+
+            self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, seed)
+
+            # publish new joints
+            if self.follower_joints is not None:
+                new_follower_joint_state = self.constructJointState(self.follower_joint_infos, self.follower_joints)
+                self.follower_pub.publish(new_follower_joint_state)
+            else:
+                rospy.logerr("Could not find IK solution")
             new_leader_joint_state = self.constructJointState(self.leader_joint_infos, self.leader_joints)
             self.leader_pub.publish(new_leader_joint_state)
-            # if self.follower_joints is not None:
-            #     new_follower_joint_state = self.constructJointState(self.follower_joint_names, self.follower_joints)
-            #     self.follower_pub.publish(new_follower_joint_state)
-            # if self.leader_joints is not None:
-            #     new_leader_joint_state = self.constructJointState(self.leader_joint_names, self.leader_joints)
-            #     self.leader_pub.publish(new_leader_joint_state)
-            # might not need to sleep because of how long the search already takes
-            # rate.sleep()
+
+            # new leader position
+            self.updateLeaderJoints()
+            rate.sleep()
 
 if __name__ == '__main__':
     try:
