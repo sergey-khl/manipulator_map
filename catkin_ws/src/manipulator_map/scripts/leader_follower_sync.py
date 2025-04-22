@@ -74,10 +74,10 @@ class LeaderFollowerSync:
         self.leader_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.leader_robot_name}/{self.leader_robot_name}.csv"
 
         self.follower_df = pd.read_csv(self.follower_map_path)
-        self.leader_df = pd.read_csv(self.leader_map_path)
+        # self.leader_df = pd.read_csv(self.leader_map_path)
 
         self.follower_ksearch = KNearestSearch(self.follower_df, pos_weight, rot_weight, prune, k)
-        self.leader_ksearch = KNearestSearch(self.leader_df, pos_weight, rot_weight, prune, k)
+        # self.leader_ksearch = KNearestSearch(self.leader_df, pos_weight, rot_weight, prune, k)
 
 
         # the joint(s) we care about matching the follower to the leader.
@@ -204,7 +204,7 @@ class LeaderFollowerSync:
         idx = random.randint(0, len(self.leader_joint_infos) - 1)
         joint = self.leader_joint_infos[idx]
 
-        delta = random.choice([-1, 1]) * 0.05
+        delta = random.choice([-1, 1]) * 0.01
 
         # Clamp to joint limits
         new_val = np.clip(self.leader_joints[idx] + delta, joint['lower_limit'], joint['upper_limit'])
@@ -221,22 +221,27 @@ class LeaderFollowerSync:
     def sync(self):
         rate = rospy.Rate(1000)  # 1 KHz
         # rate = rospy.Rate(1)  # 1 KHz
+        leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
+        seed = self.findNextSeed(leader_frame)
 
         while not rospy.is_shutdown():
             # find where the leader currently is
             leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
-            seed = self.findNextSeed(leader_frame)
+            # seed = self.findNextSeed(leader_frame)
 
             self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, seed)
 
             # publish new joints
             if self.follower_joints is not None:
+                seed = self.follower_joints
                 new_follower_joint_state = self.constructJointState(self.follower_joint_infos, self.follower_joints)
                 self.follower_pub.publish(new_follower_joint_state)
             else:
                 rospy.logerr("Could not find IK solution")
+
             new_leader_joint_state = self.constructJointState(self.leader_joint_infos, self.leader_joints)
             self.leader_pub.publish(new_leader_joint_state)
+
 
             # new leader position
             self.updateLeaderJoints()

@@ -1,4 +1,5 @@
 <launch>
+    <!-- <arg name="leader_urdf" default="$(find manipulator_map)/robots/wam/wam_new.urdf"/> -->
     <arg name="leader_urdf" default="$(find manipulator_map)/robots/panda/panda.urdf"/>
     <arg name="follower_urdf" default="$(find manipulator_map)/robots/GEN3-7DOF-VISION_ARM_URDF_V12/kinova_gen3.urdf"/>
     <arg name="rviz_config" default="$(find manipulator_map)/multi_robot.rviz"/>
