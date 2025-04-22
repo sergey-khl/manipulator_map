@@ -90,7 +90,5 @@ RUN echo "alias rsource='source ${CATKIN_WORKSPACE_DIR}/devel/setup.bash'" >> /h
  && echo "alias rclean='(cd ${CATKIN_WORKSPACE_DIR} && catkin clean -y)'" >> /home/${USERNAME}/.bash_aliases \
  && echo "rsource || source /opt/ros/${ROS_DISTRO}/setup.bash" >> /home/${USERNAME}/.bashrc
 
-RUN python3 -m venv venv && source venv/bin/activate && pip install "numpy<1.24" "scikit-learn<1.2" "pandas"
-
 USER ${USERNAME}
 

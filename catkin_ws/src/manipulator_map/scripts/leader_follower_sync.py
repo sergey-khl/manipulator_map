@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+import rospkg
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
 import kdl_parser_py.urdf
@@ -11,10 +12,10 @@ from trac_ik_python.trac_ik import IK
 # for the map stuff
 import pandas as pd
 import numpy as np
-from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import KDTree
 
 class LeaderFollowerSync:
-    def __init__(self):
+    def __init__(self, k=20, pos_weight=1, rot_weight=1, prune=5):
         rospy.init_node('leader_follower_sync_node')
 
         self.leader_pub = rospy.Publisher('leader/joint_states', JointState, queue_size=10)
@@ -27,7 +28,23 @@ class LeaderFollowerSync:
         self.leader_joints[3] = -1.57
         self.leader_joints[5] = -1.57
 
-        self.granularity = 1
+        rospack = rospkg.RosPack()
+        self.follower_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.follower_robot_name}/{self.follower_robot_name}.csv"
+        self.leader_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.leader_robot_name}/{self.leader_robot_name}.csv"
+
+        self.k = k
+
+        self.follower_df = pd.read_csv(self.follower_map_path)
+        self.leader_df = pd.read_csv(self.leader_map_path)
+
+        self.positions = self.follower_df[['x','y','z']].to_numpy()  # shape (N,3)
+        self.quats     = self.follower_df[['qx','qy','qz','qw']].to_numpy()  # shape (N,4)
+        self.pos_weight = pos_weight
+        self.rot_weight = rot_weight
+        self.prune = prune
+
+        self.pos_tree = KDTree(self.positions, leaf_size=40)
+
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -75,7 +92,7 @@ class LeaderFollowerSync:
 
         joint_infos = self.getJointInfos(robot)
 
-        return chain, ik_solver, joint_infos
+        return chain, ik_solver, joint_infos, robot.name
 
     def arrayToKdlJoints(self, joint_array):
         n_joints = len(joint_array)
@@ -83,7 +100,6 @@ class LeaderFollowerSync:
         for i in range(n_joints):
             jnt_kdl[i] = joint_array[i]
         return jnt_kdl
-
     
     def getJointInfos(self, robot):
         joint_infos = []
@@ -96,7 +112,7 @@ class LeaderFollowerSync:
 
             joint_info["name"] = joint_name
             
-            # 0 and 0 if no lower and upper limit stated
+            # 0 and 0 if no lower and upper limit stated. probably need something more robust
             if joint.limit.lower == 0 and joint.limit.upper == 0:
                 joint_info["lower_limit"] = -3.14
                 joint_info["upper_limit"] = 3.14
@@ -106,12 +122,10 @@ class LeaderFollowerSync:
             joint_infos.append(joint_info)
 
         return joint_infos
-
     
     def setupChains(self):
-        self.leader_chain, self.leader_ik_solver, self.leader_joint_infos = self.getChain("leader/robot_description", "base_link", "panda_hand")
-        self.follower_chain, self.follower_ik_solver, self.follower_joint_infos = self.getChain("follower/robot_description", "base_link", "end_effector_link")
-
+        self.leader_chain, self.leader_ik_solver, self.leader_joint_infos, self.leader_robot_name = self.getChain("leader/robot_description", "base_link", "panda_hand")
+        self.follower_chain, self.follower_ik_solver, self.follower_joint_infos, self.follower_robot_name = self.getChain("follower/robot_description", "base_link", "end_effector_link")
 
     def sync(self):
         # rate = rospy.Rate(1000)  # 1 KHz
@@ -119,23 +133,18 @@ class LeaderFollowerSync:
 
         # wait for subscriber to get some data
         rospy.sleep(0.5)
-
-
-        # follower_df = self.createMap(self.follower_chain, self.follower_joint_infos, "kinova_map")
-        # self.createMap(self.leader_chain, self.leader_joint_infos, "panda_map")
-
-        follower_df = pd.read_csv('kinova_map.csv')
-        # leader_df = pd.read_csv('panda_map.csv')
+        old = rospy.Time.now()
 
         # follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
         leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
 
         query = [*leader_frame.p, *leader_frame.M.GetQuaternion()]
-        nearest = self.kNearestInMap(query, follower_df, 20)
-        pose_features = follower_df[[info["name"] for info in self.follower_joint_infos]]
+        nearest = self.kNearestInMap(query, self.follower_df, 20)
+        pose_features = nearest[[info["name"] for info in self.follower_joint_infos]]
 
-        nearest = np.array([row for row in pose_features.to_numpy()])
-        print(nearest)
+        nearest = np.array([joint_name for joint_name in pose_features.to_numpy()])
+        new = rospy.Time.now()
+        print((new - old).to_sec())
 
         # # target = kdl.Frame(leader_frame.M, leader_frame.p)
         # self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, self.follower_joints)
@@ -161,78 +170,45 @@ class LeaderFollowerSync:
             #     new_leader_joint_state = self.constructJointState(self.leader_joint_names, self.leader_joints)
             #     self.leader_pub.publish(new_leader_joint_state)
             i += 1
-            rate.sleep()
-
-    # arbitrary DOF find all possible joint states
-    def findMapJointConfigurations(self, joint_infos, curr_idx, configuration):
-        lower = joint_infos[curr_idx]['lower_limit']
-        upper = joint_infos[curr_idx]['upper_limit']
-        step = self.granularity
-        configs = []
-        angle = lower
-
-        # go through each joint position for a joint
-        while angle <= upper:
-            cfg = configuration.copy()
-            cfg[curr_idx] = angle
-
-            if curr_idx == len(joint_infos) - 1:
-                # we are done at the last joint
-                configs.append(cfg)
-            else:
-                # fill in the configuration recursively
-                child_configs = self.findMapJointConfigurations(
-                    joint_infos, curr_idx + 1, cfg
-                )
-                configs.extend(child_configs)
-
-            angle += step
-
-        return configs
+            # might not need to sleep because of how long the search already takes
+            # rate.sleep()
 
     # geodesic distances to measure quaternions
-    def quaternionDistance(self, q1, q2):
-        dot_product = np.abs(np.dot(q1, q2))
-        dot_product = np.clip(dot_product, -1.0, 1.0)
-        return 2 * np.arccos(dot_product)
+    def _quaternionDistance(self, q1, q2s):
+        # dot_product = np.abs(np.dot(q1, q2))
+        # dot_product = np.clip(dot_product, -1.0, 1.0)
+        # return 2 * np.arccos(dot_product)
+        dots = np.abs(q2s.dot(q1))
+        np.clip(dots, -1.0, 1.0, out=dots)
+        return 2.0 * np.arccos(dots)  # shape (M,)
 
     def jointDistance(self, p1, p2, pos_weight=1.0, rot_weight=1.0):
         pos_dist = np.linalg.norm(p1[:3] - p2[:3])
         
-        rot_dist = self.quaternionDistance(p1[3:], p2[3:])
+        rot_dist = self._quaternionDistance(p1[3:], p2[3:])
 
         # combine pos and angle distance
         return pos_weight * pos_dist + rot_weight * rot_dist
 
-    def createMap(self, chain, joint_infos, map_name):
-        configuration_map = self.findMapJointConfigurations(joint_infos, 0, [0]*len(joint_infos))
-
-        # find the ee position and orientations for each configuration
-        data = []
-        for configuration in configuration_map:
-            joints = self.arrayToKdlJoints(configuration)
-            frame = self.forwardKinematics(chain, joints)
-            pos = np.array([*frame.p])
-            quat = np.array(frame.M.GetQuaternion())
-            conf = np.array(configuration)
-            data.append(np.concatenate([pos, quat, conf]))
-        
-        columns = ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'] + [joint_info["name"] for joint_info in joint_infos]
-        df = pd.DataFrame(data, columns=columns)
-
-        df.to_csv(f"{map_name}.csv", index=False)
-        rospy.loginfo(f"Saved map of size {len(df)} to {map_name}.csv")
-
-        return df
-
     def kNearestInMap(self, query, df, k):
-        pose_features = df[['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw']]
-
-        distances = np.array([self.jointDistance(query, row) for row in pose_features.to_numpy()])
-        nearest_indices = np.argsort(distances)[:k]
-        nearest_poses = df.iloc[nearest_indices]
-
-        return nearest_poses
+        qpos = np.array(query[:3]).reshape(1, -1)
+        qquat = np.array(query[3:])
+        
+        M = self.prune * k
+        dist_pos, idxs = self.pos_tree.query(qpos, k=M)
+        idxs = idxs[0]
+        dist_pos = dist_pos[0]
+        
+        cand_quats = self.quats[idxs]
+        dist_rot = self._quaternionDistance(qquat, cand_quats)  # shape (M,)
+        
+        # 3) combine and find best k
+        combined = self.pos_weight * dist_pos + self.rot_weight * dist_rot
+        best = np.argpartition(combined, k)[:k]  # indices into the M-candidates
+        best_idxs = idxs[best]                   # indices into the full df
+        
+        # 4) return those rows
+        return df.iloc[best_idxs]
 
 
 if __name__ == '__main__':
