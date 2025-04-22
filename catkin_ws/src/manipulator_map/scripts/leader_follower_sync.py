@@ -82,7 +82,7 @@ class LeaderFollowerSync:
         # the joint(s) we care about matching the follower to the leader.
         # higher the number for the joint index the more we care.
         # needs to be tweeked for each robot so TODO: make more generalizable
-        self.criteria_weights = [0, 0, 0, 1, 1, 0, 0]
+        self.criteria_weights = np.array([0, 0, 0, 1, 1, 0, 0])
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -93,13 +93,16 @@ class LeaderFollowerSync:
         joint_state.position = [*position]
         return joint_state
 
-    def forwardKinematics(self, chain, joints):
+    def forwardKinematics(self, chain, joints, segment=None):
         # Create FK solver
         fk_solver = kdl.ChainFkSolverPos_recursive(chain)
 
         # Compute forward kinematics
         frame = kdl.Frame()
-        fk_solver.JntToCart(joints, frame)
+        if segment is not None:
+            fk_solver.JntToCart(joints, frame, segment)
+        else:
+            fk_solver.JntToCart(joints, frame)
 
         return frame
     
@@ -165,23 +168,36 @@ class LeaderFollowerSync:
         self.leader_chain, self.leader_ik_solver, self.leader_joint_infos, self.leader_robot_name = self.getChain("leader/robot_description", "base_link", "panda_hand")
         self.follower_chain, self.follower_ik_solver, self.follower_joint_infos, self.follower_robot_name = self.getChain("follower/robot_description", "base_link", "end_effector_link")
 
-    # for all of the candidates find the one that best matches some of the joint angles specified
-    def findBestNearest(self, nearests, joint_infos, criteria):
-        nearest = np.array(nearests[[info["name"] for info in joint_infos]])
-        target = np.array([*criteria])
+    # find the positions of the ends of all the links not including start of base and end effector
+    def _getLinksPos(self, chain, joint_infos, joints):
+        positions = np.zeros((len(joint_infos), 3))
+        for i in range(1, len(joint_infos) + 1):
+            frame = self.forwardKinematics(chain, joints, i)
+            positions[i-1] = np.array([*frame.p])
+
+        return positions
+
+    # assuming the follower leader relationship, TODO: probably should do this for other places as well
+    def findBestNearest(self, nearest, criteria):
+        values = np.array(nearest[[info["name"] for info in self.follower_joint_infos]])
+        values = np.array([self._getLinksPos(self.follower_chain, self.follower_joint_infos, self.arrayToKdlJoints(val)) for val in values]) # shape of (20, 7 , 3)
+        target = self._getLinksPos(self.leader_chain, self.leader_joint_infos, criteria)
+        target = target[np.newaxis, :, :] # shape of (1, 7, 3)
 
         # squared difference
-        diffs = (nearest - target) ** 2
+        diffs = (values - target) ** 2
 
         # modify errors by weights
-        scores = diffs.dot(self.criteria_weights)
-        print(scores)
+        weighted = diffs * self.criteria_weights[np.newaxis, :, np.newaxis]
+
+        # link (axis=1) and coord (axis=2) to get one score per sample
+        scores = np.sum(weighted, axis=(1, 2))
 
         # choose lowest error
         best_idx = np.argmin(scores)
         # print(best_idx)
         # best_idx = 1
-        best_nearest = np.array(nearests.iloc[best_idx][[info["name"] for info in joint_infos]])
+        best_nearest = np.array(nearest.iloc[best_idx][[info["name"] for info in self.follower_joint_infos]])
         return best_nearest
 
     def sync(self):
@@ -198,7 +214,7 @@ class LeaderFollowerSync:
         query = [*leader_frame.p, *leader_frame.M.GetQuaternion()]
         nearest = self.follower_ksearch.kNearestInMap(query)
 
-        curr = self.findBestNearest(nearest, self.follower_joint_infos, self.leader_joints)
+        curr = self.findBestNearest(nearest, self.leader_joints)
         print(curr)
 
         new = rospy.Time.now()
