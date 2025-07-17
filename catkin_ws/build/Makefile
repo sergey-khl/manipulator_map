@@ -285,6 +285,19 @@ gtest/fast:
 .PHONY : gtest/fast
 
 #=============================================================================
+# Target rules for targets named _catkin_empty_exported_target
+
+# Build rule for target.
+_catkin_empty_exported_target: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 _catkin_empty_exported_target
+.PHONY : _catkin_empty_exported_target
+
+# fast build rule for target.
+_catkin_empty_exported_target/fast:
+	$(MAKE) -f barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build.make barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build
+.PHONY : _catkin_empty_exported_target/fast
+
+#=============================================================================
 # Target rules for targets named std_srvs_generate_messages_nodejs
 
 # Build rule for target.
@@ -376,19 +389,6 @@ map_msgs_generate_messages_py/fast:
 .PHONY : map_msgs_generate_messages_py/fast
 
 #=============================================================================
-# Target rules for targets named map_msgs_generate_messages_nodejs
-
-# Build rule for target.
-map_msgs_generate_messages_nodejs: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 map_msgs_generate_messages_nodejs
-.PHONY : map_msgs_generate_messages_nodejs
-
-# fast build rule for target.
-map_msgs_generate_messages_nodejs/fast:
-	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build
-.PHONY : map_msgs_generate_messages_nodejs/fast
-
-#=============================================================================
 # Target rules for targets named rosgraph_msgs_generate_messages_nodejs
 
 # Build rule for target.
@@ -452,6 +452,19 @@ actionlib_msgs_generate_messages_eus: cmake_check_build_system
 actionlib_msgs_generate_messages_eus/fast:
 	$(MAKE) -f manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/build.make manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/build
 .PHONY : actionlib_msgs_generate_messages_eus/fast
+
+#=============================================================================
+# Target rules for targets named map_msgs_generate_messages_nodejs
+
+# Build rule for target.
+map_msgs_generate_messages_nodejs: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 map_msgs_generate_messages_nodejs
+.PHONY : map_msgs_generate_messages_nodejs
+
+# fast build rule for target.
+map_msgs_generate_messages_nodejs/fast:
+	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build
+.PHONY : map_msgs_generate_messages_nodejs/fast
 
 #=============================================================================
 # Target rules for targets named std_srvs_generate_messages_py
@@ -1000,19 +1013,6 @@ visualization_msgs_generate_messages_cpp/fast:
 .PHONY : visualization_msgs_generate_messages_cpp/fast
 
 #=============================================================================
-# Target rules for targets named _catkin_empty_exported_target
-
-# Build rule for target.
-_catkin_empty_exported_target: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 _catkin_empty_exported_target
-.PHONY : _catkin_empty_exported_target
-
-# fast build rule for target.
-_catkin_empty_exported_target/fast:
-	$(MAKE) -f manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build.make manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build
-.PHONY : _catkin_empty_exported_target/fast
-
-#=============================================================================
 # Target rules for targets named map_msgs_generate_messages_eus
 
 # Build rule for target.
@@ -1229,6 +1229,7 @@ help:
 	@echo "... gmock"
 	@echo "... gtest_main"
 	@echo "... gtest"
+	@echo "... _catkin_empty_exported_target"
 	@echo "... std_srvs_generate_messages_nodejs"
 	@echo "... std_srvs_generate_messages_lisp"
 	@echo "... std_srvs_generate_messages_eus"
@@ -1236,12 +1237,12 @@ help:
 	@echo "... nav_msgs_generate_messages_lisp"
 	@echo "... nav_msgs_generate_messages_eus"
 	@echo "... map_msgs_generate_messages_py"
-	@echo "... map_msgs_generate_messages_nodejs"
 	@echo "... rosgraph_msgs_generate_messages_nodejs"
 	@echo "... actionlib_generate_messages_cpp"
 	@echo "... actionlib_msgs_generate_messages_py"
 	@echo "... rviz_generate_messages_lisp"
 	@echo "... actionlib_msgs_generate_messages_eus"
+	@echo "... map_msgs_generate_messages_nodejs"
 	@echo "... std_srvs_generate_messages_py"
 	@echo "... rosgraph_msgs_generate_messages_eus"
 	@echo "... rviz_generate_messages_py"
@@ -1284,7 +1285,6 @@ help:
 	@echo "... sensor_msgs_generate_messages_eus"
 	@echo "... sensor_msgs_generate_messages_lisp"
 	@echo "... visualization_msgs_generate_messages_cpp"
-	@echo "... _catkin_empty_exported_target"
 	@echo "... map_msgs_generate_messages_eus"
 	@echo "... actionlib_generate_messages_nodejs"
 	@echo "... actionlib_generate_messages_py"

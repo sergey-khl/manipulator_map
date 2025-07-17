@@ -67,23 +67,77 @@ class LeaderFollowerSync:
         self.follower_joints = kdl.JntArray(self.follower_chain.getNrOfJoints())
         self.leader_joints = kdl.JntArray(self.leader_chain.getNrOfJoints())
         self.leader_joints[3] = -1.57
-        self.leader_joints[5] =  2.6
 
         rospack = rospkg.RosPack()
-        self.follower_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.follower_robot_name}/{self.follower_robot_name}.csv"
-        self.leader_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.leader_robot_name}/{self.leader_robot_name}.csv"
 
-        self.follower_df = pd.read_csv(self.follower_map_path)
-        self.leader_df = pd.read_csv(self.leader_map_path)
+        self.follower_ee_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.follower_robot_name}/{self.follower_robot_name}_ee_map.csv"
+        self.follower_orientation_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.follower_robot_name}/{self.follower_robot_name}_orientation_map.csv"
+        self.follower_ee_df = pd.read_csv(self.follower_ee_map_path)
+        self.follower_orientation_df = pd.read_csv(self.follower_orientation_map_path)
+        self.follower_orientation_tree = KDTree(self.follower_orientation_df[['qx', 'qy', 'qz']].to_numpy())
 
-        self.follower_ksearch = KNearestSearch(self.follower_df, pos_weight, rot_weight, prune, k)
-        self.leader_ksearch = KNearestSearch(self.leader_df, pos_weight, rot_weight, prune, k)
+        self.leader_ee_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.leader_robot_name}/{self.leader_robot_name}_ee_map.csv"
+        self.leader_orientation_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.leader_robot_name}/{self.leader_robot_name}_orientation_map.csv"
+        self.leader_ee_df = pd.read_csv(self.leader_ee_map_path)
+        self.leader_orientation_df = pd.read_csv(self.leader_orientation_map_path)
+        self.leader_orientation_tree = KDTree(self.leader_orientation_df[['qx', 'qy', 'qz']].to_numpy())
+
+        self.follower_ksearch = KNearestSearch(self.follower_ee_df, pos_weight, rot_weight, prune, k)
+        self.leader_ksearch = KNearestSearch(self.leader_ee_df, pos_weight, rot_weight, prune, k)
+
+        self.findScalingMap()
 
 
         # the joint(s) we care about matching the follower to the leader.
         # higher the number for the joint index the more we care.
         # needs to be tweeked for each robot so TODO: make more generalizable
         self.criteria_weights = np.array([1, 1, 1, 1, 1, 1, 1])
+
+    # how much to scale follower workspace by to get leader
+    def findScalingMap(self):
+        follower_orientations = self.follower_orientation_df.to_numpy()
+        leader_orientations = self.leader_orientation_df.to_numpy()
+
+        # need 3 indices to store scaling information
+        scaling_map = follower_orientations.copy()
+        scaling_map = np.hstack((scaling_map, np.zeros((len(scaling_map), 1))))
+
+        for follower_i in range(len(follower_orientations)):
+            _, leader_i = self.leader_orientation_tree.query(follower_orientations[follower_i, :3].reshape(1, -1), k=1)
+            leader_i = leader_i[0][0]
+
+            follower_min = follower_orientations[follower_i, 3]
+            follower_max = follower_orientations[follower_i, 4]
+            leader_min = leader_orientations[leader_i, 3]
+            leader_max = leader_orientations[leader_i, 4]
+
+            # scaling offset
+            scaling_map[follower_i, 3] = follower_min
+            scaling_map[follower_i, 4] = leader_min
+            scaling_map[follower_i, 5] = (leader_max - leader_min) / (follower_max - follower_min) # might be div by 0. Assume for now we have full  sphere workspace. If not, then adjust num bin in scale map
+
+        self.scaling_map = scaling_map
+
+    def scalePoints(self, points):
+        center = self.follower_ee_df[['x', 'y', 'z']].mean().values
+        dir_vecs = points - center
+        norms = np.linalg.norm(dir_vecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1  # avoid div by zero
+        directions = dir_vecs / norms
+
+        # we can use the follower robot tree for finding the scaling array indices
+        _, idxs = self.follower_orientation_tree.query(directions, k=1)
+
+        scaling_params = self.scaling_map[idxs.flatten()]
+        follower_mins = scaling_params[:, 3:4]
+        leader_mins = scaling_params[:, 4:5]
+        scales = scaling_params[:, 5:6]
+
+        # do the actual scalin'
+        scaled_points = (norms - follower_mins) * scales + leader_mins
+        scaled_dir_vecs = directions * scaled_points
+
+        return center + scaled_dir_vecs
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -112,7 +166,7 @@ class LeaderFollowerSync:
         quat = target.M.GetQuaternion()
 
         solution = solver.get_ik([*guess], *pos, *quat)
-        return solution
+        return self.arrayToKdlJoints(solution)
     
     def getChain(self, param, base, ee):
         # Load and parse URDF
@@ -166,7 +220,8 @@ class LeaderFollowerSync:
         return joint_infos
     
     def setupChains(self):
-        self.leader_chain, self.leader_ik_solver, self.leader_joint_infos, self.leader_robot_name = self.getChain("leader/robot_description", "base_link", "panda_hand")
+        # self.leader_chain, self.leader_ik_solver, self.leader_joint_infos, self.leader_robot_name = self.getChain("leader/robot_description", "base_link", "panda_hand")
+        self.leader_chain, self.leader_ik_solver, self.leader_joint_infos, self.leader_robot_name = self.getChain("leader/robot_description", "base_link", "wam/wrist_palm_link")
         self.follower_chain, self.follower_ik_solver, self.follower_joint_infos, self.follower_robot_name = self.getChain("follower/robot_description", "base_link", "end_effector_link")
 
     # find the positions of the ends of all the links not including start of base and end effector
@@ -178,11 +233,17 @@ class LeaderFollowerSync:
 
         return positions
 
+    def angleDifference(self, a, b):
+        return (a - b + np.pi) % (2 * np.pi) - np.pi
+
     # assuming the follower leader relationship, TODO: probably should do this for other places as well
+    # TODO: update this with scaling
     def findBestNearest(self, nearest, criteria):
-        values = np.array(nearest[[info["name"] for info in self.follower_joint_infos]])
+        joint_names = [info["name"] for info in self.follower_joint_infos]
+        values = np.array(nearest[joint_names])
         values = np.array([self._getLinksPos(self.follower_chain, self.follower_joint_infos, self.arrayToKdlJoints(val)) for val in values]) # shape of (k, DOF , 3)
         target = self._getLinksPos(self.leader_chain, self.leader_joint_infos, criteria)
+        target = self.scalePoints(target)
         target = target[np.newaxis, :, :] # shape of (1, DOF, 3)
 
         # squared difference
@@ -191,26 +252,42 @@ class LeaderFollowerSync:
         # modify errors by weights
         weighted = diffs * self.criteria_weights[np.newaxis, :, np.newaxis]
 
-        # link (axis=1) and coord (axis=2) to get one score per sample
-        scores = np.sum(weighted, axis=(1, 2))
+        joint_diffs = self.angleDifference(np.array(nearest[joint_names]), np.array([*self.follower_joints])[np.newaxis, :]) ** 2
 
+
+        # link (axis=1) and coord (axis=2) to get one score per sample
+        scores = np.sum(weighted, axis=(1, 2)) + np.sum(joint_diffs, axis=1)
+        # scores = np.sum(weighted, axis=(1, 2))
+        # scores = np.sum(joint_diffs, axis=1)
 
         # choose lowest error
         best_idx = np.argmin(scores)
-        best_nearest = np.array(nearest.iloc[best_idx][[info["name"] for info in self.follower_joint_infos]])
+        best_nearest = np.array(nearest.iloc[best_idx][joint_names])
         return best_nearest
 
-    def updateLeaderJoints(self):
-        idx = random.randint(0, len(self.leader_joint_infos) - 1)
-        joint = self.leader_joint_infos[idx]
+    def updateLeaderJoints(self, joint_space=False):
+        move_prob = 0.8   # probability that a joint moves
+        max_delta = 0.02  # maximum joint step size (larger for bigger movements)
 
-        delta = random.choice([-1, 1]) * 0.05
+        # For each joint
+        for idx, joint in enumerate(self.leader_joint_infos):
+            if random.random() < move_prob:
+                delta = random.uniform(-max_delta, max_delta)
 
-        # Clamp to joint limits
-        new_val = np.clip(self.leader_joints[idx] + delta, joint['lower_limit'], joint['upper_limit'])
+                # Clamp
+                new_val = self.leader_joints[idx] + delta
+                new_val = np.clip(new_val, joint['lower_limit'], joint['upper_limit'])
 
-        # Update the joint value
-        self.leader_joints[idx] = new_val
+                self.leader_joints[idx] = new_val
+
+                if joint_space:
+                    follower_joint = self.follower_joint_infos[idx]
+                    follower_val = self.follower_joints[idx] + delta
+                    follower_val = np.clip(follower_val, follower_joint['lower_limit'], follower_joint['upper_limit'])
+                    self.follower_joints[idx] = follower_val
+
+                    
+
 
     def findNextSeed(self, leader_frame):
         query = [*leader_frame.p, *leader_frame.M.GetQuaternion()]
@@ -220,23 +297,47 @@ class LeaderFollowerSync:
 
     def sync(self):
         rate = rospy.Rate(1000)  # 1 KHz
-        # rate = rospy.Rate(1)  # 1 KHz
+
+        leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
+        pos_np = np.array([leader_frame.p.x(), leader_frame.p.y(), leader_frame.p.z()]).reshape(1, -1)
+        scaled_pos = self.scalePoints(pos_np)[0]  # scalePoints returns an array
+
+        # create new frame with scaled position and same orientation
+        leader_frame = kdl.Frame(
+            leader_frame.M,
+            kdl.Vector(*scaled_pos)
+        )
+        seed = self.findNextSeed(leader_frame)
+
+        self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, seed)
 
         while not rospy.is_shutdown():
             # find where the leader currently is
             leader_frame = self.forwardKinematics(self.leader_chain, self.leader_joints)
+            pos_np = np.array([leader_frame.p.x(), leader_frame.p.y(), leader_frame.p.z()]).reshape(1, -1)
+            scaled_pos = self.scalePoints(pos_np)[0]  # scalePoints returns an array
+
+            # create new frame with scaled position and same orientation
+            leader_frame = kdl.Frame(
+                leader_frame.M,
+                kdl.Vector(*scaled_pos)
+            )
             seed = self.findNextSeed(leader_frame)
 
+            # self.follower_joints = self.arrayToKdlJoints(seed)
             self.follower_joints = self.inverseKinematics(self.follower_ik_solver, leader_frame, seed)
 
             # publish new joints
             if self.follower_joints is not None:
+                # seed = self.follower_joints
                 new_follower_joint_state = self.constructJointState(self.follower_joint_infos, self.follower_joints)
                 self.follower_pub.publish(new_follower_joint_state)
             else:
                 rospy.logerr("Could not find IK solution")
+
             new_leader_joint_state = self.constructJointState(self.leader_joint_infos, self.leader_joints)
             self.leader_pub.publish(new_leader_joint_state)
+
 
             # new leader position
             self.updateLeaderJoints()
@@ -244,7 +345,7 @@ class LeaderFollowerSync:
 
 if __name__ == '__main__':
     try:
-        syncer = LeaderFollowerSync()
+        syncer = LeaderFollowerSync(k=1000)
         syncer.sync()
     except rospy.ROSInterruptException:
         pass

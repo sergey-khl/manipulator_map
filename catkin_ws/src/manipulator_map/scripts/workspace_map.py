@@ -7,6 +7,7 @@ import kdl_parser_py.urdf
 from urdf_parser_py.urdf import URDF
 import PyKDL as kdl
 from trac_ik_python.trac_ik import IK
+from sklearn.neighbors import KDTree
 
 # for the map stuff
 import pandas as pd
@@ -23,9 +24,8 @@ class WorkspaceMap:
         self.setupChain()
 
         rospack = rospkg.RosPack()
-        self.map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.robot_name}/{self.robot_name}.csv"
-
-        self.granularity = 1
+        self.ee_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.robot_name}/{self.robot_name}_ee_map.csv"
+        self.orientation_map_path = f"{rospack.get_path('manipulator_map')}/robots/{self.robot_name}/{self.robot_name}_orientation_map.csv"
 
     def forwardKinematics(self, chain, joints):
         # Create FK solver
@@ -99,53 +99,80 @@ class WorkspaceMap:
     def setupChain(self):
         self.chain, self.ik_solver, self.joint_infos, self.robot_name = self.getChain(self.param, self.start_link, self.end_link)
 
-    # arbitrary DOF find all possible joint states
-    def findMapJointConfigurations(self, joint_infos, curr_idx, configuration):
-        lower = joint_infos[curr_idx]['lower_limit']
-        upper = joint_infos[curr_idx]['upper_limit']
-        step = self.granularity
-        configs = []
-        angle = lower
+    def createEeMap(self, chain, joint_infos, n=500000):
+        num_joints = len(joint_infos)
 
-        # go through each joint position for a joint
-        while angle <= upper:
-            cfg = configuration.copy()
-            cfg[curr_idx] = angle
+        configs = np.zeros((n, num_joints))
 
-            if curr_idx == len(joint_infos) - 1:
-                # we are done at the last joint
-                configs.append(cfg)
-            else:
-                # fill in the configuration recursively
-                child_configs = self.findMapJointConfigurations(
-                    joint_infos, curr_idx + 1, cfg
-                )
-                configs.extend(child_configs)
+        # setup all joint configs
+        for i, joint in enumerate(joint_infos):
+            lower = joint['lower_limit']
+            upper = joint['upper_limit']
+            configs[:, i] = np.random.uniform(lower, upper, n)
 
-            angle += step
-
-        return configs
-
-    def createMap(self, chain, joint_infos):
-        configuration_map = self.findMapJointConfigurations(joint_infos, 0, [0]*len(joint_infos))
-
-        # find the ee position and orientations for each configuration
+        # remember end effector information
         data = []
-        for configuration in configuration_map:
-            joints = self.arrayToKdlJoints(configuration)
+        for cfg in configs:
+            joints = self.arrayToKdlJoints(cfg)
             frame = self.forwardKinematics(chain, joints)
             pos = np.array([*frame.p])
             quat = np.array(frame.M.GetQuaternion())
-            conf = np.array(configuration)
-            data.append(np.concatenate([pos, quat, conf]))
-        
-        columns = ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'] + [joint_info["name"] for joint_info in joint_infos]
+            row = np.concatenate([pos, quat, cfg])
+            data.append(row)
+
+        columns = ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'] + [info['name'] for info in joint_infos]
         df = pd.DataFrame(data, columns=columns)
 
-        df.to_csv(self.map_path, index=False)
-        rospy.loginfo(f"Saved map of size {len(df)} to {self.robot_name}.csv")
+        df.to_csv(self.ee_map_path, index=False)
+        rospy.loginfo(f"Saved map of size {len(df)} to {self.robot_name}_ee_map.csv")
 
         return df
+
+    def createOrientationMap(self, df, n=10000):
+        center = df[['x', 'y', 'z']].mean().values
+
+        positions = df[['x', 'y', 'z']].to_numpy()
+
+        # 3D angle from a point to the center
+        directions = positions - center
+        norms = np.linalg.norm(directions, axis=1, keepdims=True)
+        norms[norms == 0] = 1  # avoid division by zero
+        directions /= norms
+
+        # map of n rotations
+        samples = np.random.normal(size=(n, 3))
+        samples /= np.linalg.norm(samples, axis=1)[:, np.newaxis]
+
+        tree = KDTree(samples)
+
+        min_dist = np.full(n, np.inf)
+        max_dist = np.full(n, -np.inf)
+
+        # find max and min of each sample rotation using point cloud
+        for pos, direc in zip(positions, directions):
+            _, idx = tree.query(direc.reshape(1, -1), k=1)
+            idx = idx[0][0]
+
+            distance = np.linalg.norm(pos - center)
+
+            if distance < min_dist[idx]:
+                min_dist[idx] = distance
+            if distance > max_dist[idx]:
+                max_dist[idx] = distance
+
+        orientation_map = pd.DataFrame({
+            'qx': samples[:,0],
+            'qy': samples[:,1],
+            'qz': samples[:,2],
+            'min_dist': min_dist,
+            'max_dist': max_dist
+        })
+
+        orientation_map = orientation_map[~orientation_map.isin([np.inf, -np.inf]).any(axis=1)]
+        
+        orientation_map.to_csv(self.orientation_map_path, index=False)
+        rospy.loginfo(f"Saved orientation map to {self.robot_name}_orientation_map.csv")
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 4:
@@ -158,6 +185,7 @@ if __name__ == '__main__':
 
     try:
         mapper = WorkspaceMap(param, start_link, end_link)
-        mapper.createMap(mapper.chain, mapper.joint_infos)
+        df = mapper.createEeMap(mapper.chain, mapper.joint_infos, 500000)
+        mapper.createOrientationMap(df, 1000)
     except rospy.ROSInterruptException:
         pass

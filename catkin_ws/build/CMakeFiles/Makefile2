@@ -54,12 +54,14 @@ CMAKE_BINARY_DIR = /catkin_ws/build
 
 # The main recursive "all" target.
 all: gtest/all
+all: barrett_model/all
 all: manipulator_map/all
 
 .PHONY : all
 
 # The main recursive "preinstall" target.
 preinstall: gtest/preinstall
+preinstall: barrett_model/preinstall
 preinstall: manipulator_map/preinstall
 
 .PHONY : preinstall
@@ -71,9 +73,28 @@ clean: CMakeFiles/clean_test_results.dir/clean
 clean: CMakeFiles/tests.dir/clean
 clean: CMakeFiles/download_extra_data.dir/clean
 clean: gtest/clean
+clean: barrett_model/clean
 clean: manipulator_map/clean
 
 .PHONY : clean
+
+#=============================================================================
+# Directory level rules for directory barrett_model
+
+# Recursive "all" directory target.
+barrett_model/all:
+
+.PHONY : barrett_model/all
+
+# Recursive "preinstall" directory target.
+barrett_model/preinstall:
+
+.PHONY : barrett_model/preinstall
+
+# Recursive "clean" directory target.
+barrett_model/clean: barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/clean
+
+.PHONY : barrett_model/clean
 
 #=============================================================================
 # Directory level rules for directory gtest
@@ -153,12 +174,12 @@ manipulator_map/clean: manipulator_map/CMakeFiles/std_srvs_generate_messages_cpp
 manipulator_map/clean: manipulator_map/CMakeFiles/nav_msgs_generate_messages_lisp.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/nav_msgs_generate_messages_eus.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/map_msgs_generate_messages_py.dir/clean
-manipulator_map/clean: manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_generate_messages_cpp.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_py.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/rviz_generate_messages_lisp.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/clean
+manipulator_map/clean: manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/std_srvs_generate_messages_py.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/rviz_generate_messages_py.dir/clean
@@ -201,7 +222,6 @@ manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_msgs_generate_messag
 manipulator_map/clean: manipulator_map/CMakeFiles/sensor_msgs_generate_messages_eus.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/sensor_msgs_generate_messages_lisp.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/visualization_msgs_generate_messages_cpp.dir/clean
-manipulator_map/clean: manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/map_msgs_generate_messages_eus.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_generate_messages_nodejs.dir/clean
 manipulator_map/clean: manipulator_map/CMakeFiles/actionlib_generate_messages_py.dir/clean
@@ -465,6 +485,33 @@ gtest/googletest/CMakeFiles/gtest.dir/clean:
 .PHONY : gtest/googletest/CMakeFiles/gtest.dir/clean
 
 #=============================================================================
+# Target rules for target barrett_model/CMakeFiles/_catkin_empty_exported_target.dir
+
+# All Build rule for target.
+barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/all:
+	$(MAKE) -f barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build.make barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/depend
+	$(MAKE) -f barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build.make barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/catkin_ws/build/CMakeFiles --progress-num= "Built target _catkin_empty_exported_target"
+.PHONY : barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/all
+
+# Build rule for subdir invocation for target.
+barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
+.PHONY : barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/rule
+
+# Convenience name for target.
+_catkin_empty_exported_target: barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/rule
+
+.PHONY : _catkin_empty_exported_target
+
+# clean rule for target.
+barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/clean:
+	$(MAKE) -f barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/build.make barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/clean
+.PHONY : barrett_model/CMakeFiles/_catkin_empty_exported_target.dir/clean
+
+#=============================================================================
 # Target rules for target manipulator_map/CMakeFiles/std_srvs_generate_messages_nodejs.dir
 
 # All Build rule for target.
@@ -654,33 +701,6 @@ manipulator_map/CMakeFiles/map_msgs_generate_messages_py.dir/clean:
 .PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_py.dir/clean
 
 #=============================================================================
-# Target rules for target manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir
-
-# All Build rule for target.
-manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all:
-	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/depend
-	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/catkin_ws/build/CMakeFiles --progress-num= "Built target map_msgs_generate_messages_nodejs"
-.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all
-
-# Build rule for subdir invocation for target.
-manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
-.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-map_msgs_generate_messages_nodejs: manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : map_msgs_generate_messages_nodejs
-
-# clean rule for target.
-manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean:
-	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
-.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
-
-#=============================================================================
 # Target rules for target manipulator_map/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir
 
 # All Build rule for target.
@@ -814,6 +834,33 @@ actionlib_msgs_generate_messages_eus: manipulator_map/CMakeFiles/actionlib_msgs_
 manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/clean:
 	$(MAKE) -f manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/build.make manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/clean
 .PHONY : manipulator_map/CMakeFiles/actionlib_msgs_generate_messages_eus.dir/clean
+
+#=============================================================================
+# Target rules for target manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir
+
+# All Build rule for target.
+manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all:
+	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/depend
+	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/catkin_ws/build/CMakeFiles --progress-num= "Built target map_msgs_generate_messages_nodejs"
+.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all
+
+# Build rule for subdir invocation for target.
+manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
+	$(MAKE) -f CMakeFiles/Makefile2 manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
+.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule
+
+# Convenience name for target.
+map_msgs_generate_messages_nodejs: manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/rule
+
+.PHONY : map_msgs_generate_messages_nodejs
+
+# clean rule for target.
+manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean:
+	$(MAKE) -f manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/build.make manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
+.PHONY : manipulator_map/CMakeFiles/map_msgs_generate_messages_nodejs.dir/clean
 
 #=============================================================================
 # Target rules for target manipulator_map/CMakeFiles/std_srvs_generate_messages_py.dir
@@ -1948,33 +1995,6 @@ visualization_msgs_generate_messages_cpp: manipulator_map/CMakeFiles/visualizati
 manipulator_map/CMakeFiles/visualization_msgs_generate_messages_cpp.dir/clean:
 	$(MAKE) -f manipulator_map/CMakeFiles/visualization_msgs_generate_messages_cpp.dir/build.make manipulator_map/CMakeFiles/visualization_msgs_generate_messages_cpp.dir/clean
 .PHONY : manipulator_map/CMakeFiles/visualization_msgs_generate_messages_cpp.dir/clean
-
-#=============================================================================
-# Target rules for target manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir
-
-# All Build rule for target.
-manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/all:
-	$(MAKE) -f manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build.make manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/depend
-	$(MAKE) -f manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build.make manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/catkin_ws/build/CMakeFiles --progress-num= "Built target _catkin_empty_exported_target"
-.PHONY : manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/all
-
-# Build rule for subdir invocation for target.
-manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
-	$(MAKE) -f CMakeFiles/Makefile2 manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /catkin_ws/build/CMakeFiles 0
-.PHONY : manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/rule
-
-# Convenience name for target.
-_catkin_empty_exported_target: manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/rule
-
-.PHONY : _catkin_empty_exported_target
-
-# clean rule for target.
-manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/clean:
-	$(MAKE) -f manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/build.make manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/clean
-.PHONY : manipulator_map/CMakeFiles/_catkin_empty_exported_target.dir/clean
 
 #=============================================================================
 # Target rules for target manipulator_map/CMakeFiles/map_msgs_generate_messages_eus.dir
