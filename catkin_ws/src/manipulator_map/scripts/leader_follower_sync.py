@@ -335,8 +335,10 @@ class LeaderFollowerSync:
             else:
                 rospy.logerr("Could not find IK solution")
 
+
             new_leader_joint_state = self.constructJointState(self.leader_joint_infos, self.leader_joints)
             self.leader_pub.publish(new_leader_joint_state)
+
 
 
             # new leader position
