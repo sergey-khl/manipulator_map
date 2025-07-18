@@ -521,6 +521,12 @@ pluginlib_DIR:PATH=/opt/ros/noetic/share/pluginlib/cmake
 //The directory containing a CMake configuration file for resource_retriever.
 resource_retriever_DIR:PATH=/opt/ros/noetic/share/resource_retriever/cmake
 
+//Value Computed by CMake
+ros_tcp_endpoint_BINARY_DIR:STATIC=/catkin_ws/build/ROS-TCP-Endpoint
+
+//Value Computed by CMake
+ros_tcp_endpoint_SOURCE_DIR:STATIC=/catkin_ws/src/ROS-TCP-Endpoint
+
 //The directory containing a CMake configuration file for rosconsole.
 rosconsole_DIR:PATH=/opt/ros/noetic/share/rosconsole/cmake
 

@@ -1,2 +1,2 @@
-barrett_model:manipulator_map
+ROS-TCP-Endpoint:manipulator_map
 -DCATKIN_DEVEL_PREFIX=/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/catkin_ws/install -G Unix Makefiles
