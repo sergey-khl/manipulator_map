@@ -3,7 +3,7 @@
 import rospy
 import rospkg
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Vector3
+from geometry_msgs.msg import Pose
 from std_msgs.msg import Header
 import kdl_parser_py.urdf
 from urdf_parser_py.urdf import URDF
@@ -62,10 +62,11 @@ class VRTeleop:
 
         self.follower_pub = rospy.Publisher('follower/joint_states', JointState, queue_size=10)
 
-        self.vr_sub = rospy.Subscriber('/vr_position', Vector3, self.vrCallback)
-        self.vr_pos = None
+        self.vr_sub = rospy.Subscriber('/vr_pose', Pose, self.vrCallback)
         self.new_pos = None
         self.old_pos = None
+        self.new_ori = None
+        self.old_ori = None
         self.scale = 0.1
 
         self.setupChains()
@@ -92,18 +93,29 @@ class VRTeleop:
         # self.criteria_weights = np.array([1, 1, 1, 1, 1, 1, 1])
     
     def vrCallback(self, msg):
-        msg = np.array([msg.x, msg.y, msg.z])
-        if np.all(msg) == 0:
+        msg_pos = np.array([msg.position.x, msg.position.y, msg.position.z])
+        msg_ori = np.array([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w])
+
+        # if default values we want to ignore that
+        if np.all(np.array([*msg_pos, *msg_ori])[:-1]) == 0:
+            self.old_pos = None
+            self.new_pos = None
+            self.old_ori = None
+            self.new_ori = None
             return
-        msg *= self.scale
+        msg_pos *= self.scale
         if self.old_pos is None:
-            self.old_pos = msg
+            self.old_pos = msg_pos
+            self.old_ori = msg_ori
             return
         if self.new_pos is None:
-            self.new_pos = msg
+            self.new_pos = msg_pos
+            self.new_ori = msg_ori
             return
         self.old_pos = self.new_pos
-        self.new_pos = msg
+        self.new_pos = msg_pos
+        self.old_ori = self.new_ori
+        self.new_ori = msg_ori
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -243,20 +255,22 @@ class VRTeleop:
         rate = rospy.Rate(1000)  # 1 KHz
 
         while not rospy.is_shutdown():
-            if self.new_pos is None:
+            if self.new_pos is None or self.new_ori is None:
                 continue
             pos_update = kdl.Vector(*self.new_pos) - kdl.Vector(*self.old_pos)
+            ori_update = kdl.Rotation.Quaternion(*self.new_ori) * kdl.Rotation.Quaternion(*self.old_ori).Inverse()
             self.follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
             
-            self.follower_frame.p = self.follower_frame.p + pos_update
-            print(self.follower_frame.p, pos_update)
+            # self.follower_frame.p = self.follower_frame.p + pos_update
+            # self.follower_frame.M = self.follower_frame.M * ori_update.Inverse()
+            # print(self.follower_frame)
             # self.follower_joints = self.inverseKinematics(self.follower_ik_solver, self.follower_frame, self.follower_joints)
-            self.follower_joints = self.inverseKinematics(self.follower_ik_solver, self.follower_frame, [0, 0, 0, 0, 0, 0, 0])
+            self.follower_joints = self.inverseKinematics(self.follower_ik_solver, self.follower_frame, self.follower_joints)
 
             # publish new joints
             if self.follower_joints is not None:
                 # seed = self.follower_joints
-                new_follower_joint_state = self.constructJointState(self.follower_joint_infos, self.follower_joints)
+                new_follower_joint_state = self.constructJointState(self.follower_joint_infos, [*self.follower_joints])
                 self.follower_pub.publish(new_follower_joint_state)
             else:
                 rospy.logerr("Could not find IK solution")
