@@ -3,7 +3,7 @@
 import rospy
 import rospkg
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseStamped
 from std_msgs.msg import Header
 import kdl_parser_py.urdf
 from urdf_parser_py.urdf import URDF
@@ -63,11 +63,12 @@ class VRTeleop:
         self.follower_pub = rospy.Publisher('follower/joint_states', JointState, queue_size=10)
 
         self.vr_sub = rospy.Subscriber('/vr_pose', Pose, self.vrCallback)
+        self.vr_pub = rospy.Publisher('/vr_pose_stamped', PoseStamped)
         self.new_pos = None
         self.old_pos = None
         self.new_ori = None
         self.old_ori = None
-        self.scale = 0.1
+        self.scale = 1
 
         self.setupChains()
 
@@ -116,6 +117,13 @@ class VRTeleop:
         self.new_pos = msg_pos
         self.old_ori = self.new_ori
         self.new_ori = msg_ori
+
+        pose = PoseStamped()
+        pose.header.stamp = rospy.Time.now()
+        pose.header.frame_id = "base_link" 
+        pose.pose.position = msg.position
+        pose.pose.orientation = msg.orientation
+        self.vr_pub.publish(pose)
 
     def constructJointState(self, infos, position):
         joint_state = JointState()
@@ -252,7 +260,8 @@ class VRTeleop:
         return self.findBestNearest(nearest, self.leader_joints)
 
     def sync(self):
-        rate = rospy.Rate(1000)  # 1 KHz
+        rate = rospy.Rate(70)  # get messages from unity at roughly 70 times per second. not enforced anywhere so be careful
+        # will probably have to clamp your updates
 
         while not rospy.is_shutdown():
             if self.new_pos is None or self.new_ori is None:
@@ -261,10 +270,9 @@ class VRTeleop:
             ori_update = kdl.Rotation.Quaternion(*self.new_ori) * kdl.Rotation.Quaternion(*self.old_ori).Inverse()
             self.follower_frame = self.forwardKinematics(self.follower_chain, self.follower_joints)
             
-            # self.follower_frame.p = self.follower_frame.p + pos_update
-            # self.follower_frame.M = self.follower_frame.M * ori_update.Inverse()
+            self.follower_frame.p = self.follower_frame.p + pos_update
+            self.follower_frame.M =  ori_update * self.follower_frame.M
             # print(self.follower_frame)
-            # self.follower_joints = self.inverseKinematics(self.follower_ik_solver, self.follower_frame, self.follower_joints)
             self.follower_joints = self.inverseKinematics(self.follower_ik_solver, self.follower_frame, self.follower_joints)
 
             # publish new joints
